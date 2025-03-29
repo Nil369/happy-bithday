@@ -114,34 +114,57 @@ showGalleryBtn.addEventListener('click', () => {
 
 // Music controls
 let isMusicPlaying = false;
+let playAttemptInProgress = false;
 
 function toggleMusic() {
     if (isMusicPlaying) {
         bgMusic.pause();
         musicToggle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>';
         playMusicBtn.textContent = 'Play Our Song';
+        isMusicPlaying = false;
     } else {
         playMusic();
+        isMusicPlaying = true;
     }
-    isMusicPlaying = !isMusicPlaying;
 }
 
 function playMusic() {
-    // Create a user interaction to enable autoplay
-    document.body.addEventListener('click', function musicPlayHandler() {
-        bgMusic.play().catch(error => {
-            console.log("Auto-play was prevented by the browser:", error);
-        });
-        document.body.removeEventListener('click', musicPlayHandler);
-    }, {once: true});
+    // Prevent multiple simultaneous play attempts
+    if (playAttemptInProgress) return;
     
-    // Try to play anyway (might work if already interacted)
-    bgMusic.play().catch(error => {
-        console.log("Auto-play was prevented by the browser:", error);
-    });
+    playAttemptInProgress = true;
     
+    // Update UI first
     musicToggle.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/><path d="M8 17V5l12-2v12"/></svg>';
     playMusicBtn.textContent = 'Pause Our Song';
+    
+    // Use a Promise to properly handle async play
+    bgMusic.play()
+        .then(() => {
+            // Success - music is playing
+            playAttemptInProgress = false;
+        })
+        .catch(error => {
+            console.log("Auto-play was prevented. Will try again on user interaction:", error);
+            playAttemptInProgress = false;
+            
+            // Set up a one-time click handler to try playing again
+            const unlockAudio = () => {
+                // Only attempt if user intended music to be playing
+                if (!isMusicPlaying) return;
+                
+                bgMusic.play()
+                    .then(() => {
+                        // Successfully playing now
+                        document.removeEventListener('click', unlockAudio);
+                    })
+                    .catch(err => {
+                        console.log("Still couldn't play audio:", err);
+                    });
+            };
+            
+            document.addEventListener('click', unlockAudio, { once: true });
+        });
 }
 
 musicToggle.addEventListener('click', toggleMusic);
@@ -199,8 +222,13 @@ document.addEventListener('DOMContentLoaded', () => {
     typedText.innerHTML = '';
     
     // Set up autoplay for music
-    playMusic();
     isMusicPlaying = true;
+    
+    // Wait a short delay before attempting to play music
+    // This helps avoid conflicts with browser initialization
+    setTimeout(() => {
+        playMusic();
+    }, 500);
     
     // Preload animation
     gsap.from(envelope, { 
